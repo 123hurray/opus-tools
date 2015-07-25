@@ -5,4 +5,6 @@ audio in the Opus format.
 
 For more information on Opus see http://www.opus-codec.org/
 
-**Add support for decode opus ogg file to G.711 PCM a law wave format**
+**Add support for decoding opus ogg file to G.711 PCM a law wave format**
+
+If you want to decode to PCM linear format, add --pcm flag to opusdec commandline
