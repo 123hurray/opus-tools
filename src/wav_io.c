@@ -156,5 +156,5 @@ int write_wav_header(FILE *file, int rate, int mapping_family, int channels, int
    ret &= fprintf (file, "data") >= 0;
    ret &= fwrite_le32 (0x7fffffff, file);
 
-   return !ret ? -1 : extensible ? 40 : 16;
+   return !ret ? -1 : extensible ? 40 : ((fp||pcm)?16:18);
 }

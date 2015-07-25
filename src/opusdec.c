@@ -45,6 +45,7 @@
 #include <opus.h>
 #include <opus_multistream.h>
 #include <ogg/ogg.h>
+#include <g711.h>
 
 #if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
 # include "unicode_support.h"
@@ -278,7 +279,7 @@ static void print_comments(char *comments, int length)
    }
 }
 
-FILE *out_file_open(char *outFile, int *wav_format, int rate, int mapping_family, int *channels, int fp)
+FILE *out_file_open(char *outFile, int *wav_format, int rate, int mapping_family, int *channels, int fp, int is_pcm)
 {
    FILE *fout=NULL;
    /*Open output file*/
@@ -429,7 +430,7 @@ FILE *out_file_open(char *outFile, int *wav_format, int rate, int mapping_family
       }
       if (*wav_format)
       {
-         *wav_format = write_wav_header(fout, rate, mapping_family, *channels, fp);
+         *wav_format = write_wav_header(fout, rate, mapping_family, *channels, fp, is_pcm);
          if (*wav_format < 0)
          {
             fprintf (stderr, "Error writing WAV header.\n");
@@ -464,6 +465,7 @@ void usage(void)
    printf (" --force-wav           Force wav header on output\n");
    printf (" --packet-loss n       Simulate n %% random packet loss\n");
    printf (" --save-range file     Saves check values for every frame to a file\n");
+   printf (" --pcm    		       Saves as pcm format wav\n");
    printf (" -h, --help            This help\n");
    printf (" -V, --version         Version information\n");
    printf (" --quiet               Quiet mode\n");
@@ -559,11 +561,11 @@ static OpusMSDecoder *process_header(ogg_packet *op, opus_int32 *rate,
 }
 
 opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout, SpeexResamplerState *resampler,
-                       int *skip, shapestate *shapemem, int file, opus_int64 maxout, int fp)
+                       int *skip, shapestate *shapemem, int file, opus_int64 maxout, int fp, int is_pcm)
 {
    opus_int64 sampout=0;
    int i,ret,tmp_skip;
-   unsigned out_len;
+   unsigned out_len, j;
    short *out;
    float *buf;
    float *output;
@@ -621,8 +623,18 @@ opus_int64 audio_write(float *pcm, int channels, int frame_size, FILE *fout, Spe
          else fprintf(stderr, "Error playing audio.\n");
        }else
 #endif
-         ret=fwrite(fp?(char *)output:(char *)out, (fp?4:2)*channels, out_len<maxout?out_len:maxout, fout);
-       sampout+=ret;
+
+		if(!is_pcm&&!fp) {
+			char* out_alaw = alloca(sizeof(char) * out_len * channels);
+			for(j = 0; j < out_len*channels; ++j) {
+				out_alaw[j] = Snack_Lin2Alaw(out[j]);
+			}
+			ret=fwrite(out_alaw, channels, out_len<maxout?out_len:maxout, fout);       
+		}
+		else {
+			ret=fwrite(fp?(char *)output:(char *)out, (fp?4:2)*channels, out_len<maxout?out_len:maxout, fout);
+		}
+		sampout+=ret;
        maxout-=ret;
      }
    } while (frame_size>0 && maxout>0);
@@ -643,6 +655,7 @@ int main(int argc, char **argv)
    int stream_init = 0;
    int quiet = 0;
    int forcewav = 0;
+   int is_pcm = 0;
    ogg_int64_t page_granule=0;
    ogg_int64_t link_out=0;
    struct option long_options[] =
@@ -658,6 +671,7 @@ int main(int argc, char **argv)
       {"force-wav", no_argument, NULL, 0},
       {"packet-loss", required_argument, NULL, 0},
       {"save-range", required_argument, NULL, 0},
+      {"pcm", no_argument, NULL, 0},
       {0, 0, 0, 0}
    };
    ogg_sync_state oy;
@@ -762,6 +776,9 @@ int main(int argc, char **argv)
          } else if (strcmp(long_options[option_index].name,"packet-loss")==0)
          {
             loss_percent = atof(optarg);
+         } else if (strcmp(long_options[option_index].name,"pcm")==0)
+         {
+            is_pcm = 1;
          }
          break;
       case 'h':
@@ -920,7 +937,7 @@ int main(int argc, char **argv)
                    fprintf(stderr,"This is currently unhandled by opusdec.\n");
                    quit(1);
                }
-
+			   
                if(ogg_stream_packetout(&os, &op)!=0 || og.header[og.header_len-1]==255)
                {
                   /*The format specifies that the initial header and tags packets are on their
@@ -948,7 +965,6 @@ int main(int argc, char **argv)
                   fprintf(stderr, "Memory allocation failure.\n");
                   quit(1);
                }
-
                /*Normal players should just play at 48000 or their maximum rate,
                  as described in the OggOpus spec.  But for commandline tools
                  like opusdec it can be desirable to exactly preserve the original
@@ -961,7 +977,7 @@ int main(int argc, char **argv)
                      fprintf(stderr, "resampler error: %s\n", speex_resampler_strerror(err));
                   speex_resampler_skip_zeros(resampler);
                }
-               if(!fout)fout=out_file_open(outFile, &wav_format, rate, mapping_family, &channels, fp);
+               if(!fout)fout=out_file_open(outFile, &wav_format, rate, mapping_family, &channels, fp, is_pcm);
             } else if (packet_count==1)
             {
                if (!quiet)
@@ -1052,9 +1068,9 @@ int main(int argc, char **argv)
                  the final end-trim by not letting the output sample count
                  get ahead of the granpos indicated value.*/
                maxout=((page_granule-gran_offset)*rate/48000)-link_out;
-               outsamp=audio_write(output, channels, frame_size, fout, resampler, &preskip, dither?&shapemem:0, strlen(outFile)!=0,0>maxout?0:maxout,fp);
+               outsamp=audio_write(output, channels, frame_size, fout, resampler, &preskip, dither?&shapemem:0, strlen(outFile)!=0,0>maxout?0:maxout,fp,is_pcm);
                link_out+=outsamp;
-               audio_size+=(fp?4:2)*outsamp*channels;
+               audio_size+=(fp?4:(is_pcm?2:1))*outsamp*channels;
             }
             packet_count++;
          }
@@ -1065,20 +1081,15 @@ int main(int argc, char **argv)
             int drain;
 
             zeros=(float *)calloc(100*channels,sizeof(float));
-            if(!zeros)
-            {
-                fprintf(stderr, "Memory allocation failure.\n");
-                quit(1);
-            }
             drain = speex_resampler_get_input_latency(resampler);
             do {
                opus_int64 outsamp;
                int tmp = drain;
                if (tmp > 100)
                   tmp = 100;
-               outsamp=audio_write(zeros, channels, tmp, fout, resampler, NULL, &shapemem, strlen(outFile)!=0, ((page_granule-gran_offset)*rate/48000)-link_out,fp);
+               outsamp=audio_write(zeros, channels, tmp, fout, resampler, NULL, &shapemem, strlen(outFile)!=0, ((page_granule-gran_offset)*rate/48000)-link_out,fp,is_pcm);
                link_out+=outsamp;
-               audio_size+=(fp?4:2)*outsamp*channels;
+               audio_size+=(fp?4:(is_pcm?2:1))*outsamp*channels;
                drain -= tmp;
             } while (drain>0);
             free(zeros);
@@ -1107,9 +1118,9 @@ int main(int argc, char **argv)
       if (fseek(fout,4,SEEK_SET)==0)
       {
          int tmp;
-         tmp = le_int(audio_size+20+wav_format);
+         tmp = le_int(audio_size+((fp||is_pcm)?20:32)+wav_format);
          if(fwrite(&tmp,4,1,fout)!=1)fprintf(stderr,"Error writing end length.\n");
-         if (fseek(fout,16+wav_format,SEEK_CUR)==0)
+         if (fseek(fout,((fp||is_pcm)?16:20)+wav_format,SEEK_CUR)==0)
          {
             tmp = le_int(audio_size);
             if(fwrite(&tmp,4,1,fout)!=1)fprintf(stderr,"Error writing header length.\n");
@@ -1117,6 +1128,16 @@ int main(int argc, char **argv)
          {
             fprintf (stderr, "First seek worked, second didn't\n");
          }
+		 if (!fp&&!is_pcm) {
+			 if(fseek(fout,4,SEEK_CUR)==0)
+			 {
+				tmp = le_int(audio_size);
+				if(fwrite(&tmp,4,1,fout)!=1)fprintf(stderr,"Error writing header length.\n");
+			 } else
+			 {
+				fprintf (stderr, "Second seek worked, third didn't\n");
+			 }
+		 }
       } else {
          fprintf (stderr, "Cannot seek on wav file output, wav size chunk will be incorrect\n");
       }
