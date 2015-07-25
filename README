@@ -5,3 +5,4 @@ audio in the Opus format.
 
 For more information on Opus see http://www.opus-codec.org/
 
+**Add support for decode opus ogg file to G.711 PCM a law wave format**
