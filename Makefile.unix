@@ -43,7 +43,7 @@ src/info_opus.o: CFLAGS += -DOPUSTOOLS
 opusenc: src/opus_header.o src/opusenc.o src/resample.o src/audio-in.o src/diag_range.o src/lpc.o src/flac.o src/picture.o $(COMMON_OBJS)
 	$(CC) $(LDFLAGS) $^ -o $@ ../opus/.libs/libopus.a -lm -logg -lFLAC $(LIBS)
 
-opusdec: src/opus_header.o src/wav_io.o src/wave_out.o src/opusdec.o src/resample.o src/diag_range.o $(COMMON_OBJS)
+opusdec: src/opus_header.o src/wav_io.o src/wave_out.o src/opusdec.o src/resample.o src/diag_range.o /src/g711.o $(COMMON_OBJS)
 	$(CC) $(LDFLAGS) $^ -o $@ ../opus/.libs/libopus.a -lm -logg $(LIBS)
 
 opusinfo: src/opus_header.o src/opusinfo.o src/info_opus.o src/picture.o $(COMMON_OBJS)

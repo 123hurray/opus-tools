@@ -57,7 +57,7 @@ opusenc_CFLAGS = $(AM_CFLAGS) $(FLAC_CFLAGS)
 opusenc_LDADD = $(OPUS_LIBS) $(FLAC_LIBS) $(OGG_LIBS) $(LIBM)
 opusenc_MANS = man/opusenc.1
 
-opusdec_SOURCES = src/opus_header.c src/wav_io.c src/wave_out.c src/opusdec.c src/resample.c src/diag_range.c win32/unicode_support.c
+opusdec_SOURCES = src/opus_header.c src/wav_io.c src/wave_out.c src/opusdec.c src/resample.c src/diag_range.c win32/unicode_support.c src/g711.c
 opusdec_CPPFLAGS = $(AM_CPPFLAGS) $(resampler_CPPFLAGS)
 opusdec_LDADD = $(OPUS_LIBS) $(OGG_LIBS) $(LIBM)
 opusdec_MANS = man/opusdec.1
