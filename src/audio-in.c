@@ -613,7 +613,7 @@ int wav_open(FILE *in, oe_enc_opt *opt, unsigned char *oldbuf, int buflen)
             }
             else
             {
-#if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
+#if defined HAVE__FTELLI64 && (defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64)
                 opt->total_samples_per_channel = _ftelli64(in);
 #elif defined HAVE_FSEEKO
                 opt->total_samples_per_channel = ftello(in);
